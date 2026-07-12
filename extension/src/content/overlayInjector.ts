@@ -120,6 +120,36 @@ export class OverlayInjector {
     this.flyToStep(activeStep);
   }
 
+  // Called by GuidePanel when Computer Use returns exact coordinates
+  flyToPageCoords(x: number, y: number, instruction: string): void {
+    if (!this.cursor || !this.bubble || !this.ring) return;
+    this.cursor.setAttribute('data-idle', 'false');
+    this.bubble.setAttribute('data-visible', 'false');
+    this.ring.setAttribute('data-visible', 'false');
+
+    // x,y are viewport coords from Computer Use — add scroll offset for page coords
+    const pageX = x + window.scrollX;
+    const pageY = y + window.scrollY;
+
+    this.animateBezierFlight(pageX, pageY, () => {
+      if (!this.cursor || !this.bubble || !this.ring) return;
+      this.cursor.style.setProperty('--rot', '-30deg');
+      this.cursor.setAttribute('data-idle', 'true');
+
+      this.ring.style.left = `${pageX - 22}px`;
+      this.ring.style.top = `${pageY - 22}px`;
+      this.ring.setAttribute('data-visible', 'true');
+
+      this.bubble.style.left = `${Math.min(pageX, window.innerWidth + window.scrollX - 280)}px`;
+      this.bubble.style.top = `${pageY + 20}px`;
+      this.streamBubbleText(instruction);
+    });
+  }
+
+  getStep(stepNumber: number): GuideStep | undefined {
+    return this.steps.find(s => s.stepNumber === stepNumber);
+  }
+
   clearOverlays(): void {
     if (this.flightTimer !== null) cancelAnimationFrame(this.flightTimer);
     if (this.positionRaf !== null) cancelAnimationFrame(this.positionRaf);
@@ -284,7 +314,15 @@ export class OverlayInjector {
   }
 
   private findElement(step: GuideStep): Element | null {
+    // 1. Try each comma-separated CSS selector, only if element is visible
     if (step.selector) {
+      for (const sel of step.selector.split(',')) {
+        try {
+          const el = document.querySelector(sel.trim());
+          if (el && this.isVisible(el)) return el;
+        } catch { /* invalid selector */ }
+      }
+      // Retry without visibility check (element may be off-screen)
       for (const sel of step.selector.split(',')) {
         try {
           const el = document.querySelector(sel.trim());
@@ -293,21 +331,50 @@ export class OverlayInjector {
       }
     }
 
-    if (step.selectorFallback) {
-      const needle = step.selectorFallback.toLowerCase();
-      const candidates = document.querySelectorAll<HTMLElement>(
-        'button, a, input[type="submit"], input[type="button"], [role="button"], label, select, textarea, input'
-      );
-      for (const el of candidates) {
-        const elText = (
-          el.textContent ?? el.getAttribute('value') ?? el.getAttribute('placeholder') ?? ''
-        ).toLowerCase().trim();
-        if (elText && (needle.includes(elText.slice(0, 25)) || elText.includes(needle.slice(0, 25)))) {
-          return el;
-        }
-      }
+    // 2. Text search using selectorFallback, then instruction words
+    const searchText = (step.selectorFallback || step.instruction).toLowerCase();
+    const found = this.findByText(searchText);
+    if (found) return found;
+
+    // 3. Try individual keywords from instruction
+    const words = step.instruction.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    for (const word of words) {
+      const el = this.findByText(word);
+      if (el) return el;
     }
 
     return null;
+  }
+
+  private findByText(needle: string): Element | null {
+    const candidates = document.querySelectorAll<HTMLElement>(
+      'button, a.ui-btn, [role="button"], input[type="submit"], input[type="button"], .ui-btn'
+    );
+    // Exact match first
+    for (const el of candidates) {
+      if (this.getElementText(el) === needle) return el;
+    }
+    // Partial match
+    const short = needle.slice(0, 20);
+    for (const el of candidates) {
+      const t = this.getElementText(el);
+      if (t && (t.includes(short) || short.includes(t.slice(0, 20)))) return el;
+    }
+    return null;
+  }
+
+  private getElementText(el: HTMLElement): string {
+    return (
+      el.textContent?.trim().toLowerCase() ||
+      el.getAttribute('aria-label')?.toLowerCase() ||
+      el.getAttribute('title')?.toLowerCase() ||
+      el.getAttribute('value')?.toLowerCase() ||
+      ''
+    );
+  }
+
+  private isVisible(el: Element): boolean {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
   }
 }

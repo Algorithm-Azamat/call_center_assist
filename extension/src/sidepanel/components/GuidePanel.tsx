@@ -16,6 +16,7 @@ export default function GuidePanel() {
     guide, isGuideLoading, guideError,
     guideActiveStep, isGuideOpen,
     setIsGuideOpen, setGuideActiveStep, clearGuide,
+    settings,
   } = useExtensionStore();
 
   const [query, setQuery] = useState('');
@@ -31,14 +32,25 @@ export default function GuidePanel() {
     if (!guide) return;
     const clamped = Math.max(1, Math.min(step, guide.steps.length));
     setGuideActiveStep(clamped);
+
+    const currentStep = guide.steps.find(s => s.stepNumber === clamped);
+
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]?.id) {
-        chrome.tabs.sendMessage(tabs[0].id, {
-          type: 'GUIDE_HIGHLIGHT',
-          payload: { steps: guide.steps, activeStep: clamped },
-        }).catch(() => {});
-      }
+      if (!tabs[0]?.id) return;
+      // Always show CSS-based highlight as immediate fallback
+      chrome.tabs.sendMessage(tabs[0].id, {
+        type: 'GUIDE_HIGHLIGHT',
+        payload: { steps: guide.steps, activeStep: clamped },
+      }).catch(() => {});
     });
+
+    // If Anthropic key exists — request vision-precise coords
+    if (settings.anthropicApiKey && currentStep) {
+      chrome.runtime.sendMessage({
+        type: 'VISION_LOCATE_REQUEST',
+        payload: { instruction: currentStep.instruction, stepNumber: clamped },
+      });
+    }
   };
 
   const handleClear = () => {

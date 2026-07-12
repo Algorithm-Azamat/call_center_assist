@@ -156,6 +156,16 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
       overlay.showSteps(message.payload.steps, message.payload.activeStep);
       break;
 
+    case 'VISION_LOCATE_RESPONSE': {
+      const p = message.payload;
+      if ('x' in p && 'y' in p) {
+        // Find instruction for this step from current guide steps
+        const step = overlay.getStep(p.stepNumber);
+        overlay.flyToPageCoords(p.x, p.y, step?.instruction ?? '');
+      }
+      break;
+    }
+
     case 'GUIDE_CLEAR':
       overlay.clearOverlays();
       break;

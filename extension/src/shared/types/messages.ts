@@ -30,6 +30,8 @@ export type MessageType =
   | 'GUIDE_CLEAR'
   | 'GET_PAGE_CONTEXT'
   | 'PAGE_CONTEXT_RESPONSE'
+  | 'VISION_LOCATE_REQUEST'
+  | 'VISION_LOCATE_RESPONSE'
   | 'CAPTURE_MODE_START'
   | 'CAPTURE_MODE_STOP'
   | 'ELEMENT_CAPTURED'
@@ -190,6 +192,16 @@ export interface ElementDeleteRequestMessage extends BaseMessage {
   payload: { id: string };
 }
 
+export interface VisionLocateRequestMessage extends BaseMessage {
+  type: 'VISION_LOCATE_REQUEST';
+  payload: { instruction: string; stepNumber: number };
+}
+
+export interface VisionLocateResponseMessage extends BaseMessage {
+  type: 'VISION_LOCATE_RESPONSE';
+  payload: { stepNumber: number; x: number; y: number } | { stepNumber: number; error: string };
+}
+
 export interface GetPageContextMessage extends BaseMessage {
   type: 'GET_PAGE_CONTEXT';
 }
@@ -232,7 +244,9 @@ export type ExtensionMessage =
   | ElementMapRequestMessage
   | ElementMapResponseMessage
   | ElementMapUpdatedMessage
-  | ElementDeleteRequestMessage;
+  | ElementDeleteRequestMessage
+  | VisionLocateRequestMessage
+  | VisionLocateResponseMessage;
 
 // Re-export for convenience
 export type { PageContext, AIResponse, KBChunk, KBDocument, ExtensionSettings };

@@ -246,6 +246,56 @@ async function handleMessage(
       break;
     }
 
+    case 'VISION_LOCATE_REQUEST': {
+      sendResponse();
+      const { instruction, stepNumber } = message.payload;
+      try {
+        const settings = await getSettings();
+        if (!settings.anthropicApiKey) {
+          broadcast({ type: 'VISION_LOCATE_RESPONSE', payload: { stepNumber, error: 'no_key' } } as ExtensionMessage);
+          break;
+        }
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id) break;
+
+        // Capture screenshot of the active tab
+        const screenshotDataUrl = await chrome.tabs.captureVisibleTab(
+          tab.windowId,
+          { format: 'jpeg', quality: 85 }
+        );
+
+        // Get viewport dimensions from tab
+        const viewportWidth = tab.width ?? 1280;
+        const viewportHeight = tab.height ?? 800;
+
+        aiClient.updateSettings(settings);
+        const coords = await aiClient.locateByVision(
+          screenshotDataUrl,
+          instruction,
+          viewportWidth,
+          viewportHeight
+        );
+
+        if (coords) {
+          broadcast({
+            type: 'VISION_LOCATE_RESPONSE',
+            payload: { stepNumber, x: coords.x, y: coords.y },
+          } as ExtensionMessage);
+        } else {
+          broadcast({
+            type: 'VISION_LOCATE_RESPONSE',
+            payload: { stepNumber, error: 'not_found' },
+          } as ExtensionMessage);
+        }
+      } catch (err) {
+        broadcast({
+          type: 'VISION_LOCATE_RESPONSE',
+          payload: { stepNumber, error: err instanceof Error ? err.message : 'error' },
+        } as ExtensionMessage);
+      }
+      break;
+    }
+
     case 'KB_UPLOAD_START': {
       const { fileName, fileType, fileData } = message.payload;
       processKBUpload(fileName, fileType, fileData);
