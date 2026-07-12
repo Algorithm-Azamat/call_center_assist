@@ -251,7 +251,7 @@ async function handleMessage(
       const { instruction, stepNumber } = message.payload;
       try {
         const settings = await getSettings();
-        if (!settings.anthropicApiKey) {
+        if (!settings.openaiApiKey) {
           broadcast({ type: 'VISION_LOCATE_RESPONSE', payload: { stepNumber, error: 'no_key' } } as ExtensionMessage);
           break;
         }

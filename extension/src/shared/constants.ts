@@ -42,7 +42,6 @@ export const SUPPORTED_EMBEDDING_MODELS = [
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   openaiApiKey: '',
-  anthropicApiKey: '',
   model: 'gpt-4o-mini',
   embeddingModel: 'text-embedding-3-small',
   baseUrl: 'https://api.openai.com/v1',

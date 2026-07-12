@@ -39,64 +39,33 @@ export default function SettingsPanel() {
 
       <h2 className="text-sm font-semibold text-white">Settings</h2>
 
-      {/* API Keys */}
-      <div className="glass-card p-3 space-y-3">
+      {/* API Key */}
+      <div className="glass-card p-3 space-y-2">
         <div className="flex items-center gap-1.5 mb-1">
           <Key size={13} className="text-brand-400" />
-          <span className="text-xs font-medium text-slate-300">API Keys</span>
+          <span className="text-xs font-medium text-slate-300">OpenAI API Key</span>
         </div>
-
-        {/* OpenAI */}
-        <div className="space-y-1">
-          <label className="text-[10px] text-slate-500">OpenAI (анализ экрана, база знаний)</label>
-          <div className="relative">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={localSettings.openaiApiKey}
-              onChange={(e) => update('openaiApiKey', e.target.value)}
-              placeholder="sk-..."
-              className="w-full bg-surface-3 border border-white/10 rounded-lg px-3 py-2 pr-9
-                         text-xs text-white placeholder-slate-600 focus:outline-none focus:border-brand-500/50
-                         transition-colors"
-            />
-            <button
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-            >
-              {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
-            </button>
-          </div>
+        <div className="relative">
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={localSettings.openaiApiKey}
+            onChange={(e) => update('openaiApiKey', e.target.value)}
+            placeholder="sk-..."
+            className="w-full bg-surface-3 border border-white/10 rounded-lg px-3 py-2 pr-9
+                       text-xs text-white placeholder-slate-600 focus:outline-none focus:border-brand-500/50
+                       transition-colors"
+          />
+          <button
+            onClick={() => setShowKey(!showKey)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+          >
+            {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
+          </button>
         </div>
-
-        {/* Anthropic — Computer Use for precise cursor */}
-        <div className="space-y-1">
-          <label className="text-[10px] text-slate-500 flex items-center gap-1">
-            Anthropic
-            <span className="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[9px] font-medium">ТОЧНЫЙ КУРСОР</span>
-          </label>
-          <div className="relative">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={localSettings.anthropicApiKey}
-              onChange={(e) => update('anthropicApiKey', e.target.value)}
-              placeholder="sk-ant-..."
-              className="w-full bg-surface-3 border border-white/10 rounded-lg px-3 py-2 pr-9
-                         text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/50
-                         transition-colors"
-            />
-            <button
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-            >
-              {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
-            </button>
-          </div>
-          <p className="text-[10px] text-slate-600">
-            Если указан — гид видит экран и летит точно в элемент, как Clicky.
-          </p>
-        </div>
-
-        <p className="text-[10px] text-slate-600">Ключи хранятся локально, никуда не отправляются.</p>
+        <p className="text-[10px] text-slate-600">
+          Используется для анализа экрана, точного позиционирования курсора (gpt-4o vision) и базы знаний.
+          Ключ хранится локально.
+        </p>
       </div>
 
       {/* Model selection */}

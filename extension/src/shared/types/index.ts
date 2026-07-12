@@ -87,7 +87,6 @@ export interface ElementRecord {
 // ─── Settings ──────────────────────────────────────────────────────────────
 export interface ExtensionSettings {
   openaiApiKey: string;
-  anthropicApiKey: string;  // for Computer Use vision — cursor precision
   model: string;
   embeddingModel: string;
   baseUrl: string;

@@ -147,63 +147,50 @@ export class AIClient {
     return data.data?.[0]?.embedding ?? [];
   }
 
-  // ─── Computer Use — точные пиксельные координаты как в Clicky ─────────────
-  // Принимает base64-скриншот вкладки (из chrome.tabs.captureVisibleTab),
-  // возвращает {x, y} в координатах страницы или null.
+  // ─── Vision locate — точные координаты через GPT-4o vision ────────────────
+  // Делает скриншот, отправляет в gpt-4o, получает {x, y} в пикселях viewport.
   async locateByVision(
-    screenshotDataUrl: string,   // data:image/jpeg;base64,...
-    instruction: string,          // текст шага
+    screenshotDataUrl: string,
+    instruction: string,
     viewportWidth: number,
     viewportHeight: number
   ): Promise<{ x: number; y: number } | null> {
-    if (!this.settings.anthropicApiKey) return null;
+    if (!this.settings.openaiApiKey) return null;
 
-    // Pick best Computer Use resolution matching viewport aspect ratio
-    const RESOLUTIONS = [
-      { w: 1024, h: 768 },
-      { w: 1280, h: 800 },
-      { w: 1366, h: 768 },
-    ];
-    const ratio = viewportWidth / Math.max(viewportHeight, 1);
-    const best = RESOLUTIONS.reduce((a, b) =>
-      Math.abs(a.w / a.h - ratio) <= Math.abs(b.w / b.h - ratio) ? a : b
-    );
-
-    // Resize screenshot to Computer Use resolution via canvas
-    const resizedBase64 = await this.resizeScreenshot(screenshotDataUrl, best.w, best.h);
+    // Resize to 1280×800 — достаточно для точного определения координат
+    const resizedBase64 = await this.resizeScreenshot(screenshotDataUrl, 1280, 800);
     if (!resizedBase64) return null;
 
-    const userPrompt = `The user needs to: "${instruction}"
+    const prompt = `You are looking at a screenshot of a web application (${viewportWidth}×${viewportHeight} pixels).
 
-Look at the screenshot. Find the specific UI element (button, link, field, icon) the user should interact with for this step. Click on it.
+Task for the user: "${instruction}"
 
-If there is no specific element to click (e.g. a conceptual step), respond with text "no element".`;
+Find the specific UI element (button, link, input field, icon) the user needs to interact with.
+Return ONLY a JSON object with the pixel coordinates of the CENTER of that element in the ORIGINAL screenshot dimensions (${viewportWidth}×${viewportHeight}):
+{"x": <number>, "y": <number>}
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+If no specific element exists for this task, return: {"x": null, "y": null}
+No other text, just the JSON.`;
+
+    const response = await fetch(`${this.settings.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': this.settings.anthropicApiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'computer-use-2025-11-24',
+        Authorization: `Bearer ${this.settings.openaiApiKey}`,
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 256,
-        tools: [{
-          type: 'computer_20251124',
-          name: 'computer',
-          display_width_px: best.w,
-          display_height_px: best.h,
-        }],
+        model: 'gpt-4o',
+        max_tokens: 64,
+        temperature: 0,
+        response_format: { type: 'json_object' },
         messages: [{
           role: 'user',
           content: [
             {
-              type: 'image',
-              source: { type: 'base64', media_type: 'image/jpeg', data: resizedBase64 },
+              type: 'image_url',
+              image_url: { url: `data:image/jpeg;base64,${resizedBase64}`, detail: 'high' },
             },
-            { type: 'text', text: userPrompt },
+            { type: 'text', text: prompt },
           ],
         }],
       }),
@@ -212,20 +199,19 @@ If there is no specific element to click (e.g. a conceptual step), respond with 
     if (!response.ok) return null;
 
     const data = await response.json();
-    const toolUse = (data.content as Array<{ type: string; input?: { coordinate?: number[] } }>)
-      ?.find(b => b.type === 'tool_use');
+    let parsed: { x?: number | null; y?: number | null };
+    try {
+      parsed = JSON.parse(data.choices?.[0]?.message?.content ?? '{}');
+    } catch {
+      return null;
+    }
 
-    const coord = toolUse?.input?.coordinate;
-    if (!Array.isArray(coord) || coord.length < 2) return null;
+    if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return null;
 
-    // Clamp to declared resolution
-    const cx = Math.max(0, Math.min(coord[0], best.w));
-    const cy = Math.max(0, Math.min(coord[1], best.h));
-
-    // Scale back to actual viewport coordinates
+    // Coords are for original viewport size — clamp to valid range
     return {
-      x: (cx / best.w) * viewportWidth,
-      y: (cy / best.h) * viewportHeight,
+      x: Math.max(0, Math.min(parsed.x, viewportWidth)),
+      y: Math.max(0, Math.min(parsed.y, viewportHeight)),
     };
   }
 

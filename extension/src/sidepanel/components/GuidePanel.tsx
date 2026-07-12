@@ -44,8 +44,8 @@ export default function GuidePanel() {
       }).catch(() => {});
     });
 
-    // If Anthropic key exists — request vision-precise coords
-    if (settings.anthropicApiKey && currentStep) {
+    // If OpenAI key exists — request vision-precise coords via gpt-4o
+    if (settings.openaiApiKey && currentStep) {
       chrome.runtime.sendMessage({
         type: 'VISION_LOCATE_REQUEST',
         payload: { instruction: currentStep.instruction, stepNumber: clamped },
