@@ -1,0 +1,6 @@
+node_modules/
+extension/dist/
+extension/.vite-temp/
+*.local
+.DS_Store
+Thumbs.db
