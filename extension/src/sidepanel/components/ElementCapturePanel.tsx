@@ -12,12 +12,16 @@ export default function ElementCapturePanel() {
 
   useEffect(() => { loadElements(); }, []);
 
-  // Single listener — handles both map refresh and capture-completion reset
+  // Map refresh on every recorded element; capture stays active until stopped
   useEffect(() => {
     const handler = (msg: { type: string }) => {
-      if (msg.type !== 'ELEMENT_MAP_UPDATED') return;
-      loadElements();
-      if (isCapturingRef.current) {
+      if (msg.type === 'ELEMENT_MAP_UPDATED') {
+        loadElements();
+        if (isCapturingRef.current) setLabel(''); // typed name consumed by first click
+        return;
+      }
+      if (msg.type === 'CAPTURE_MODE_STOPPED') {
+        // User pressed Esc on the page
         isCapturingRef.current = false;
         setIsCapturing(false);
         setLabel('');
@@ -36,10 +40,9 @@ export default function ElementCapturePanel() {
   }
 
   async function startCapture() {
-    const l = label.trim();
-    if (!l) return;
+    // Label is optional: without one, elements auto-name from their own text
     setIsCapturing(true);
-    await chrome.runtime.sendMessage({ type: 'CAPTURE_MODE_START', payload: { label: l } });
+    await chrome.runtime.sendMessage({ type: 'CAPTURE_MODE_START', payload: { label: label.trim() } });
   }
 
   async function stopCapture() {
@@ -80,7 +83,7 @@ export default function ElementCapturePanel() {
 
           {/* How-to hint */}
           <div className="bg-amber-500/8 border border-amber-500/15 rounded-lg px-3 py-2 text-xs text-amber-200/60 leading-relaxed">
-            Введи название → нажми <span className="text-amber-300 font-medium">Записать</span> → кликни на элемент в Bitrix24. Гид будет использовать точный селектор.
+            Нажми <span className="text-amber-300 font-medium">Записать</span> → кликай по элементам: клики работают как обычно (окна открываются), и каждый записывается → <span className="text-amber-300 font-medium">Стоп</span> или Esc. Названия подставляются автоматически.
           </div>
 
           {/* Quick suggestions */}
@@ -104,7 +107,7 @@ export default function ElementCapturePanel() {
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !isCapturing && startCapture()}
-              placeholder="Название кнопки или действия…"
+              placeholder="Название первого элемента (необязательно)…"
               disabled={isCapturing}
               className={clsx(
                 'flex-1 bg-surface-2 border border-white/10 rounded-lg px-3 py-2',
@@ -123,11 +126,9 @@ export default function ElementCapturePanel() {
             ) : (
               <button
                 onClick={startCapture}
-                disabled={!label.trim()}
                 className={clsx(
                   'px-3 py-2 rounded-lg text-sm flex items-center gap-1.5 transition-colors flex-shrink-0',
-                  'bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:bg-amber-500/30',
-                  !label.trim() && 'opacity-30 cursor-not-allowed'
+                  'bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:bg-amber-500/30'
                 )}
               >
                 <Crosshair size={13} /> Записать
@@ -140,7 +141,7 @@ export default function ElementCapturePanel() {
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/25">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
               <p className="text-amber-300 text-xs">
-                Кликни на <span className="font-semibold">«{label}»</span> на странице
+                Кликай на элементы — каждый клик записывается. Esc или Стоп — закончить.
               </p>
             </div>
           )}

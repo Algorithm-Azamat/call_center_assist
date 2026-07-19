@@ -30,6 +30,7 @@ export interface PageContext {
   tables: TableInfo[];
   timestamp: number;
   tabId: number;
+  crmFamily?: string;       // detected CRM product family, e.g. 'bitrix24'
 }
 
 // ─── AI Response ───────────────────────────────────────────────────────────

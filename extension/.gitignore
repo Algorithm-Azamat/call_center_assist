@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Packed extension + private signing key — never commit
+dist.crx
+dist.pem
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

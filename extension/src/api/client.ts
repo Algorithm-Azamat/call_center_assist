@@ -157,16 +157,17 @@ export class AIClient {
   ): Promise<{ x: number; y: number } | null> {
     if (!this.settings.openaiApiKey) return null;
 
-    // Resize to 1280×800 — достаточно для точного определения координат
-    const resizedBase64 = await this.resizeScreenshot(screenshotDataUrl, 1280, 800);
-    if (!resizedBase64) return null;
+    // Downscale preserving aspect ratio — model answers in this image's space
+    const resized = await this.resizeScreenshot(screenshotDataUrl, 1280);
+    if (!resized) return null;
+    const { base64: resizedBase64, width: imgW, height: imgH } = resized;
 
-    const prompt = `You are looking at a screenshot of a web application (${viewportWidth}×${viewportHeight} pixels).
+    const prompt = `You are looking at a screenshot of a web application. The image is ${imgW}×${imgH} pixels.
 
 Task for the user: "${instruction}"
 
 Find the specific UI element (button, link, input field, icon) the user needs to interact with.
-Return ONLY a JSON object with the pixel coordinates of the CENTER of that element in the ORIGINAL screenshot dimensions (${viewportWidth}×${viewportHeight}):
+Return ONLY a JSON object with the pixel coordinates of the CENTER of that element in this image's coordinate space (${imgW}×${imgH}):
 {"x": <number>, "y": <number>}
 
 If no specific element exists for this task, return: {"x": null, "y": null}
@@ -208,31 +209,45 @@ No other text, just the JSON.`;
 
     if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return null;
 
-    // Coords are for original viewport size — clamp to valid range
+    // Model coords are in resized-image space — scale to viewport CSS px
+    // (ratio mapping absorbs devicePixelRatio, like Clicky does)
+    const x = parsed.x * (viewportWidth / imgW);
+    const y = parsed.y * (viewportHeight / imgH);
     return {
-      x: Math.max(0, Math.min(parsed.x, viewportWidth)),
-      y: Math.max(0, Math.min(parsed.y, viewportHeight)),
+      x: Math.max(0, Math.min(Math.round(x), viewportWidth)),
+      y: Math.max(0, Math.min(Math.round(y), viewportHeight)),
     };
   }
 
-  private resizeScreenshot(dataUrl: string, targetW: number, targetH: number): Promise<string | null> {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = targetW;
-          canvas.height = targetH;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) { resolve(null); return; }
-          ctx.drawImage(img, 0, 0, targetW, targetH);
-          // Strip the data:image/jpeg;base64, prefix
-          const full = canvas.toDataURL('image/jpeg', 0.85);
-          resolve(full.split(',')[1] ?? null);
-        } catch { resolve(null); }
-      };
-      img.onerror = () => resolve(null);
-      img.src = dataUrl;
-    });
+  // Worker-safe resize: no Image/document in an MV3 service worker —
+  // use createImageBitmap + OffscreenCanvas instead.
+  private async resizeScreenshot(
+    dataUrl: string,
+    maxWidth: number
+  ): Promise<{ base64: string; width: number; height: number } | null> {
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const scale = Math.min(1, maxWidth / bitmap.width);
+      const width = Math.round(bitmap.width * scale);
+      const height = Math.round(bitmap.height * scale);
+
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { bitmap.close(); return null; }
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+
+      const outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+      const bytes = new Uint8Array(await outBlob.arrayBuffer());
+      let binary = '';
+      const CHUNK = 0x8000;
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+      }
+      return { base64: btoa(binary), width, height };
+    } catch {
+      return null;
+    }
   }
 }

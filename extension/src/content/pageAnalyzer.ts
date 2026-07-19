@@ -1,5 +1,6 @@
 import type { PageContext, FormField, ButtonInfo, TableInfo } from '../shared/types';
 import { AI_CONFIG } from '../shared/constants';
+import { NAV_ITEM_SELECTOR, detectCRMFamily } from './siteMapLearner';
 
 /**
  * Extracts a structured PageContext from the current DOM.
@@ -14,6 +15,7 @@ export function extractPageContext(tabId: number): PageContext {
     tables: extractTables(),
     timestamp: Date.now(),
     tabId,
+    crmFamily: detectCRMFamily(),
   };
 }
 
@@ -77,22 +79,32 @@ function findLabel(el: Element): string {
 // ─── Buttons ─────────────────────────────────────────────────────────────────
 function extractButtons(): ButtonInfo[] {
   const buttons: ButtonInfo[] = [];
-  const els = document.querySelectorAll<HTMLElement>(
-    'button, input[type="submit"], input[type="button"], [role="button"], a[class*="btn"]'
-  );
+  const seen = new Set<string>();
 
-  els.forEach((el) => {
+  const push = (el: HTMLElement) => {
     const text = (el.textContent ?? el.getAttribute('value') ?? '').trim();
-    if (!text || text.length > 80) return; // Skip empty / giant text
+    if (!text || text.length > 80 || seen.has(text)) return; // Skip empty / giant / duplicate
+    seen.add(text);
     buttons.push({
       text: text.slice(0, 60),
       type: (el as HTMLInputElement).type || el.tagName.toLowerCase(),
       id: el.id || '',
       className: el.className?.toString().slice(0, 80) || '',
     });
+  };
+
+  document.querySelectorAll<HTMLElement>(
+    'button, input[type="submit"], input[type="button"], [role="button"], a[class*="btn"]'
+  ).forEach(push);
+
+  // Navigation links — discovered structurally (works on any CRM, no vendor classes)
+  document.querySelectorAll<HTMLElement>(NAV_ITEM_SELECTOR).forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return; // hidden nav templates
+    push(el);
   });
 
-  return buttons.slice(0, 20);
+  return buttons.slice(0, 30); // room for buttons + nav links
 }
 
 // ─── Tables ──────────────────────────────────────────────────────────────────

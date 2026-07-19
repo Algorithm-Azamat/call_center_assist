@@ -17,6 +17,7 @@ import EmptyState from './components/EmptyState';
 import LoadingOverlay from './components/LoadingOverlay';
 import GuidePanel from './components/GuidePanel';
 import ElementCapturePanel from './components/ElementCapturePanel';
+import CrawlerPanel from './components/CrawlerPanel';
 
 export default function App() {
   const {
@@ -159,6 +160,9 @@ export default function App() {
 
           {/* ── Element map (recording) ── */}
           <ElementCapturePanel />
+
+          {/* ── Portal crawler ── */}
+          <CrawlerPanel />
 
           {/* ── Interactive Guide ── */}
           <GuidePanel />

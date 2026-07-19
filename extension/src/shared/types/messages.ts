@@ -28,17 +28,27 @@ export type MessageType =
   | 'GUIDE_ERROR'
   | 'GUIDE_HIGHLIGHT'
   | 'GUIDE_CLEAR'
+  | 'GUIDE_SCROLL'
+  | 'GUIDE_STEP_DONE'
   | 'GET_PAGE_CONTEXT'
   | 'PAGE_CONTEXT_RESPONSE'
   | 'VISION_LOCATE_REQUEST'
   | 'VISION_LOCATE_RESPONSE'
   | 'CAPTURE_MODE_START'
   | 'CAPTURE_MODE_STOP'
+  | 'CAPTURE_MODE_STOPPED'
   | 'ELEMENT_CAPTURED'
+  | 'SITE_MAP_LEARNED'
   | 'ELEMENT_MAP_REQUEST'
   | 'ELEMENT_MAP_RESPONSE'
   | 'ELEMENT_MAP_UPDATED'
-  | 'ELEMENT_DELETE_REQUEST';
+  | 'ELEMENT_DELETE_REQUEST'
+  | 'GET_NAV_LINKS'
+  | 'CRAWL_START'
+  | 'CRAWL_STOP'
+  | 'CRAWL_PROGRESS'
+  | 'CRAWL_COMPLETE'
+  | 'CRAWL_ERROR';
 
 export interface BaseMessage {
   type: MessageType;
@@ -159,6 +169,48 @@ export interface GuideClearMessage extends BaseMessage {
   type: 'GUIDE_CLEAR';
 }
 
+// Background → content: step the page during vision scroll-search.
+// Response: { atBottom: boolean }
+export interface GuideScrollMessage extends BaseMessage {
+  type: 'GUIDE_SCROLL';
+  payload: { phase: 'begin' | 'down' | 'end'; restore?: boolean };
+}
+
+// Content → panel: the user actually clicked the step's target on the page
+export interface GuideStepDoneMessage extends BaseMessage {
+  type: 'GUIDE_STEP_DONE';
+  payload: { stepNumber: number };
+}
+
+// ─── Portal crawler ────────────────────────────────────────────────────────
+// Background → content: list this page's nav URLs. Response: { links: string[] }
+export interface GetNavLinksMessage extends BaseMessage {
+  type: 'GET_NAV_LINKS';
+}
+
+export interface CrawlStartMessage extends BaseMessage {
+  type: 'CRAWL_START';
+}
+
+export interface CrawlStopMessage extends BaseMessage {
+  type: 'CRAWL_STOP';
+}
+
+export interface CrawlProgressMessage extends BaseMessage {
+  type: 'CRAWL_PROGRESS';
+  payload: { done: number; total: number; url: string };
+}
+
+export interface CrawlCompleteMessage extends BaseMessage {
+  type: 'CRAWL_COMPLETE';
+  payload: { pages: number; stopped: boolean };
+}
+
+export interface CrawlErrorMessage extends BaseMessage {
+  type: 'CRAWL_ERROR';
+  payload: { error: string };
+}
+
 export interface CaptureModeStartMessage extends BaseMessage {
   type: 'CAPTURE_MODE_START';
   payload: { label: string };
@@ -168,10 +220,21 @@ export interface CaptureModeStopMessage extends BaseMessage {
   type: 'CAPTURE_MODE_STOP';
 }
 
+// Sent content → panel when capture ended on the page side (Esc key)
+export interface CaptureModeStoppedMessage extends BaseMessage {
+  type: 'CAPTURE_MODE_STOPPED';
+}
+
 // Sent content → background after user clicks an element in capture mode
 export interface ElementCapturedMessage extends BaseMessage {
   type: 'ELEMENT_CAPTURED';
   payload: { label: string; selector: string; url: string };
+}
+
+// Sent content → background with auto-discovered navigation for the learning DB
+export interface SiteMapLearnedMessage extends BaseMessage {
+  type: 'SITE_MAP_LEARNED';
+  payload: { origin: string; family: string; elements: import('./index').ElementRecord[] };
 }
 
 export interface ElementMapRequestMessage extends BaseMessage {
@@ -236,17 +299,27 @@ export type ExtensionMessage =
   | GuideErrorMessage
   | GuideHighlightMessage
   | GuideClearMessage
+  | GuideScrollMessage
+  | GuideStepDoneMessage
   | GetPageContextMessage
   | PageContextResponseMessage
   | CaptureModeStartMessage
   | CaptureModeStopMessage
+  | CaptureModeStoppedMessage
   | ElementCapturedMessage
+  | SiteMapLearnedMessage
   | ElementMapRequestMessage
   | ElementMapResponseMessage
   | ElementMapUpdatedMessage
   | ElementDeleteRequestMessage
   | VisionLocateRequestMessage
-  | VisionLocateResponseMessage;
+  | VisionLocateResponseMessage
+  | GetNavLinksMessage
+  | CrawlStartMessage
+  | CrawlStopMessage
+  | CrawlProgressMessage
+  | CrawlCompleteMessage
+  | CrawlErrorMessage;
 
 // Re-export for convenience
 export type { PageContext, AIResponse, KBChunk, KBDocument, ExtensionSettings };

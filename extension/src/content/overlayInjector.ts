@@ -1,9 +1,18 @@
 import type { GuideStep } from '../shared/types/guide';
+import { NAV_ITEM_SELECTOR } from './siteMapLearner';
 
 const STYLE_ID = 'aoc-overlay-styles';
 const CURSOR_ID = 'aoc-ai-cursor';
 const BUBBLE_ID = 'aoc-cursor-bubble';
 const RING_ID = 'aoc-cursor-ring';
+
+// Generic verbs/nouns too common to identify a specific button by themselves
+const GENERIC_WORDS = new Set([
+  'нажми', 'нажмите', 'кнопку', 'кнопка', 'кликни', 'клик', 'выбери', 'выберите',
+  'открой', 'откройте', 'создай', 'создать', 'создайте', 'заполни', 'заполните',
+  'введи', 'введите', 'перейди', 'перейдите', 'поле', 'меню', 'раздел',
+  'click', 'button', 'press', 'open', 'select', 'create', 'field', 'menu',
+]);
 
 export class OverlayInjector {
   private cursor: HTMLElement | null = null;
@@ -16,6 +25,32 @@ export class OverlayInjector {
   private typingTimer: number | null = null;
   private currentX = -100;
   private currentY = -100;
+
+  // Auto-advance: current step's target for real-click detection
+  private activeTargetEl: Element | null = null;
+  private activeCoordsPage: { x: number; y: number } | null = null;
+  private stepDoneFired = false;
+  private clickWatcherAttached = false;
+  /** Set by content/index.ts — called when the user clicks the step's target */
+  onStepComplete?: (stepNumber: number) => void;
+
+  // The user performed the step themselves — detect a click on/near the target
+  private onDocClick = (e: MouseEvent): void => {
+    if (this.stepDoneFired || this.steps.length === 0) return;
+    const t = e.target as Element | null;
+    let hit = false;
+    if (t && this.activeTargetEl &&
+        (this.activeTargetEl === t || this.activeTargetEl.contains(t) || t.contains(this.activeTargetEl))) {
+      hit = true;
+    } else if (this.activeCoordsPage) {
+      // Vision-located steps: accept clicks within a small radius of the point
+      hit = Math.hypot(e.pageX - this.activeCoordsPage.x, e.pageY - this.activeCoordsPage.y) < 60;
+    }
+    if (hit) {
+      this.stepDoneFired = true;
+      this.onStepComplete?.(this.activeStep);
+    }
+  };
 
   private injectStyles(): void {
     if (document.getElementById(STYLE_ID)) return;
@@ -112,6 +147,10 @@ export class OverlayInjector {
     this.createElements();
     this.steps = steps;
     this.activeStep = activeStep;
+    if (!this.clickWatcherAttached) {
+      document.addEventListener('click', this.onDocClick, true);
+      this.clickWatcherAttached = true;
+    }
     this.flyToStep(activeStep);
   }
 
@@ -120,16 +159,22 @@ export class OverlayInjector {
     this.flyToStep(activeStep);
   }
 
-  // Called by GuidePanel when Computer Use returns exact coordinates
+  // Called when vision locate returns exact coordinates
   flyToPageCoords(x: number, y: number, instruction: string): void {
     if (!this.cursor || !this.bubble || !this.ring) return;
     this.cursor.setAttribute('data-idle', 'false');
     this.bubble.setAttribute('data-visible', 'false');
     this.ring.setAttribute('data-visible', 'false');
 
-    // x,y are viewport coords from Computer Use — add scroll offset for page coords
+    // x,y are viewport coords from vision — add scroll offset for page coords
     const pageX = x + window.scrollX;
     const pageY = y + window.scrollY;
+
+    // Auto-advance target: element under the located point (overlays are
+    // pointer-events:none, so elementFromPoint sees the real element)
+    this.activeTargetEl = document.elementFromPoint(x, y);
+    this.activeCoordsPage = { x: pageX, y: pageY };
+    this.stepDoneFired = false;
 
     this.animateBezierFlight(pageX, pageY, () => {
       if (!this.cursor || !this.bubble || !this.ring) return;
@@ -163,6 +208,13 @@ export class OverlayInjector {
     this.bubble = null;
     this.ring = null;
     this.steps = [];
+    if (this.clickWatcherAttached) {
+      document.removeEventListener('click', this.onDocClick, true);
+      this.clickWatcherAttached = false;
+    }
+    this.activeTargetEl = null;
+    this.activeCoordsPage = null;
+    this.stepDoneFired = false;
   }
 
   private flyToStep(stepNum: number): void {
@@ -176,7 +228,10 @@ export class OverlayInjector {
 
     const el = this.findElement(step);
     if (!el) {
-      // Element not found — show bubble in center
+      // Element not found — show bubble in center; no click target to watch
+      this.activeTargetEl = null;
+      this.activeCoordsPage = null;
+      this.stepDoneFired = false;
       this.showBubbleCentered(`${step.stepNumber}. ${step.instruction}`);
       return;
     }
@@ -190,6 +245,11 @@ export class OverlayInjector {
     // Target: center of element
     const targetX = rect.left + window.scrollX + rect.width / 2;
     const targetY = rect.top + window.scrollY + rect.height / 2;
+
+    // Auto-advance target for real-click detection
+    this.activeTargetEl = el;
+    this.activeCoordsPage = { x: targetX, y: targetY };
+    this.stepDoneFired = false;
 
     this.animateBezierFlight(targetX, targetY, () => {
       this.onArrival(step, targetX, targetY, rect);
@@ -314,19 +374,15 @@ export class OverlayInjector {
   }
 
   private findElement(step: GuideStep): Element | null {
-    // 1. Try each comma-separated CSS selector, only if element is visible
+    // 1. Try each comma-separated CSS selector, only if element is visible.
+    // No retry without the visibility check: hidden Bitrix24 template nodes
+    // have zero-size rects and send the cursor to a meaningless spot.
+    // (Scrolled-off-screen elements still have nonzero rects, so they pass.)
     if (step.selector) {
       for (const sel of step.selector.split(',')) {
         try {
           const el = document.querySelector(sel.trim());
           if (el && this.isVisible(el)) return el;
-        } catch { /* invalid selector */ }
-      }
-      // Retry without visibility check (element may be off-screen)
-      for (const sel of step.selector.split(',')) {
-        try {
-          const el = document.querySelector(sel.trim());
-          if (el) return el;
         } catch { /* invalid selector */ }
       }
     }
@@ -336,8 +392,10 @@ export class OverlayInjector {
     const found = this.findByText(searchText);
     if (found) return found;
 
-    // 3. Try individual keywords from instruction
-    const words = step.instruction.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    // 3. Try individual keywords from instruction — skip generic verbs that
+    // match unrelated buttons (e.g. «Создать» hijacking «Создать сделку»)
+    const words = step.instruction.toLowerCase().split(/\s+/)
+      .filter(w => w.length > 3 && !GENERIC_WORDS.has(w));
     for (const word of words) {
       const el = this.findByText(word);
       if (el) return el;
@@ -347,8 +405,9 @@ export class OverlayInjector {
   }
 
   private findByText(needle: string): Element | null {
+    // Buttons + structurally-discovered navigation ("open section X" steps)
     const candidates = document.querySelectorAll<HTMLElement>(
-      'button, a.ui-btn, [role="button"], input[type="submit"], input[type="button"], .ui-btn'
+      `button, a.ui-btn, [role="button"], input[type="submit"], input[type="button"], .ui-btn, ${NAV_ITEM_SELECTOR}`
     );
     // Exact match first
     for (const el of candidates) {

@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { MapPin, Send, X, ChevronLeft, ChevronRight, Loader2, CheckCircle2, Circle, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { MapPin, Send, X, ChevronLeft, ChevronRight, Loader2, CheckCircle2, Circle, ChevronDown, ChevronUp, PartyPopper } from 'lucide-react';
 import { useExtensionStore } from '../store/extensionStore';
 import clsx from 'clsx';
 
@@ -58,7 +58,28 @@ export default function GuidePanel() {
     chrome.runtime.sendMessage({ type: 'GUIDE_CLEAR' });
   };
 
-  const progress = guide ? Math.round(((guideActiveStep - 1) / Math.max(guide.steps.length - 1, 1)) * 100) : 0;
+  // Auto-advance: content script reports the user clicked the step's target
+  useEffect(() => {
+    const handler = (msg: { type: string; payload?: { stepNumber?: number } }) => {
+      if (msg.type !== 'GUIDE_STEP_DONE') return;
+      if (!guide || msg.payload?.stepNumber !== guideActiveStep) return; // stale/duplicate
+      if (guideActiveStep < guide.steps.length) {
+        // Small delay so the click's result (slider, new screen) can render
+        setTimeout(() => goToStep(guideActiveStep + 1), 500);
+      } else {
+        // Last step done — mark the whole guide complete, remove page overlays
+        setGuideActiveStep(guide.steps.length + 1);
+        chrome.runtime.sendMessage({ type: 'GUIDE_CLEAR' });
+      }
+    };
+    chrome.runtime.onMessage.addListener(handler);
+    return () => chrome.runtime.onMessage.removeListener(handler);
+  }, [guide, guideActiveStep]);
+
+  const isComplete = !!guide && guideActiveStep > guide.steps.length;
+  const progress = guide
+    ? Math.min(100, Math.round(((guideActiveStep - 1) / Math.max(guide.steps.length - 1, 1)) * 100))
+    : 0;
 
   return (
     <div className="glass-card overflow-hidden">
@@ -72,8 +93,8 @@ export default function GuidePanel() {
           <span className="section-label">Пошаговый гид</span>
           {isGuideLoading && <Loader2 size={11} className="text-indigo-400 animate-spin" />}
           {guide && !isGuideLoading && (
-            <span className="badge bg-indigo-500/20 text-indigo-300 text-[10px]">
-              {guideActiveStep}/{guide.steps.length}
+            <span className={clsx('badge text-[10px]', isComplete ? 'bg-green-500/20 text-green-300' : 'bg-indigo-500/20 text-indigo-300')}>
+              {isComplete ? '✓ готово' : `${guideActiveStep}/${guide.steps.length}`}
             </span>
           )}
         </div>
@@ -157,6 +178,14 @@ export default function GuidePanel() {
           {guide && !isGuideLoading && (
             <div className="space-y-2">
 
+              {/* Completed banner */}
+              {isComplete && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 animate-fade-in">
+                  <PartyPopper size={14} className="text-green-400 flex-shrink-0" />
+                  <span className="text-green-300 text-xs font-medium">Гид пройден — все шаги выполнены!</span>
+                </div>
+              )}
+
               {/* Summary */}
               {guide.summary && (
                 <p className="text-white/40 text-xs leading-relaxed">{guide.summary}</p>
@@ -215,7 +244,7 @@ export default function GuidePanel() {
                   <ChevronLeft size={12} /> Назад
                 </button>
                 <span className="text-white/25 text-[10px] w-12 text-center tabular-nums">
-                  {guideActiveStep} / {guide.steps.length}
+                  {Math.min(guideActiveStep, guide.steps.length)} / {guide.steps.length}
                 </span>
                 <button
                   onClick={() => goToStep(guideActiveStep + 1)}

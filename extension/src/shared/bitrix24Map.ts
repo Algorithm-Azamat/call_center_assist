@@ -7,6 +7,13 @@ import type { ElementRecord } from './types';
 
 const BASE: Omit<ElementRecord, 'id' | 'capturedAt'>[] = [
 
+  // ─── Левое меню (главная навигация — есть на каждой странице портала) ───
+  { label: 'Меню: Контакт-центр', selector: '[data-id="menu_contact_center"] a, a[href*="/contact_center/"]', url: '*' },
+  { label: 'Меню: CRM', selector: '[data-id="menu_crm"] a, a[href="/crm/"]', url: '*' },
+  { label: 'Меню: Задачи и проекты', selector: '[data-id="menu_tasks"] a, a[href*="/tasks/"]', url: '*' },
+  { label: 'Меню: Календарь', selector: '[data-id="menu_calendar"] a, a[href*="/calendar/"]', url: '*' },
+  { label: 'Меню: Телефония', selector: '[data-id="menu_telephony"] a, a[href*="/telephony/"]', url: '*' },
+
   // ─── CRM Toolbar (верхняя панель в любом разделе CRM) ───────────────────
   { label: 'Кнопка Создать (добавить)', selector: '.ui-btn-split.ui-btn-success', url: '/crm/' },
   { label: 'Кнопка Создать — основная', selector: '.ui-btn-split.ui-btn-success .ui-btn-main', url: '/crm/' },
